@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Payment } from '../helpers';
+import { paymentApi } from '@/lib/paymentApi';
 
 export type CreatePaymentInput = {
     amount: string;
@@ -10,42 +11,8 @@ export type CreatePaymentInput = {
     email: string;
 };
 
-const SEED_PAYMENTS: Payment[] = [
-    {
-        id: 'PAY-1024',
-        amount: 4200,
-        status: 'paid',
-        name: 'Rohan Mehta',
-        phone: '9876543210',
-        email: 'rohan@example.com',
-        createdAt: new Date(Date.now() - 1000 * 60 * 14).toISOString(),
-    },
-    {
-        id: 'PAY-1023',
-        amount: 950,
-        status: 'pending',
-        name: 'Aanya Sharma',
-        phone: '9123456789',
-        email: 'aanya@example.com',
-        createdAt: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
-    },
-    {
-        id: 'PAY-1022',
-        amount: 1800,
-        status: 'paid',
-        name: 'Vikram Rao',
-        phone: '9988776655',
-        email: 'vikram@example.com',
-        createdAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    },
-];
-
-function makeId() {
-    return `PAY-${Math.floor(1000 + Math.random() * 9000)}`;
-}
-
 export function usePayments() {
-    const [payments, setPayments] = useState<Payment[]>(SEED_PAYMENTS);
+    const [payments, setPayments] = useState<Payment[]>([]);
     const [isCreating, setIsCreating] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [checkingId, setCheckingId] = useState<string | null>(null);
@@ -53,30 +20,47 @@ export function usePayments() {
     const refreshPayments = useCallback(async () => {
         setIsRefreshing(true);
         try {
-            await new Promise((resolve) => setTimeout(resolve, 350));
-            setPayments((prev) =>
-                [...prev].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-            );
+            const response = await paymentApi.getPayments();
+            const mapped: Payment[] = response.data.payments.map((p) => ({
+                id: p.id,
+                amount: p.amount,
+                status: p.status,
+                name: p.customerName,
+                phone: p.phone,
+                email: p.email,
+                createdAt: p.createdAt,
+            }));
+            setPayments(mapped);
+        } catch (error) {
+            console.error('Failed to fetch payments:', error);
         } finally {
             setIsRefreshing(false);
         }
     }, []);
 
-    const createPayment = useCallback(async (input: CreatePaymentInput): Promise<Payment> => {
+    const createPayment = useCallback(async (input: CreatePaymentInput): Promise<any> => {
         setIsCreating(true);
         try {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            const next: Payment = {
-                id: makeId(),
+            const response = await paymentApi.createPayment({
                 amount: Number(input.amount),
-                status: 'pending',
-                name: input.name.trim(),
+                customerName: input.name.trim(),
                 phone: input.phone.trim(),
                 email: input.email.trim(),
-                createdAt: new Date().toISOString(),
+            });
+            
+            const p = response.data;
+            const next: Payment = {
+                id: p.id,
+                amount: p.amount,
+                status: p.status,
+                name: p.customerName,
+                phone: p.phone,
+                email: p.email,
+                createdAt: p.createdAt,
             };
+            
             setPayments((prev) => [next, ...prev]);
-            return next;
+            return p; // Returning the full response which includes qrCode
         } finally {
             setIsCreating(false);
         }
@@ -85,18 +69,26 @@ export function usePayments() {
     const checkStatus = useCallback(async (id: string) => {
         setCheckingId(id);
         try {
-            await new Promise((resolve) => setTimeout(resolve, 400));
+            const response = await paymentApi.getPaymentStatus(id);
+            const newStatus = response.data.status;
+            
             setPayments((prev) =>
                 prev.map((payment) =>
-                    payment.id === id && payment.status === 'pending'
-                        ? { ...payment, status: 'paid' }
+                    payment.id === id
+                        ? { ...payment, status: newStatus }
                         : payment,
                 ),
             );
+        } catch (error) {
+            console.error('Failed to check status:', error);
         } finally {
             setCheckingId(null);
         }
     }, []);
+
+    useEffect(() => {
+        refreshPayments();
+    }, [refreshPayments]);
 
     return {
         payments,

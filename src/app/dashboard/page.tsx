@@ -31,8 +31,8 @@ export default function DashboardPage() {
     const stats = useMemo(() => {
         const totalOrders = payments.length;
         const totalVolume = payments.reduce((sum, payment) => sum + payment.amount, 0);
-        const paid = payments.filter((payment) => payment.status === 'paid').length;
-        const pending = payments.filter((payment) => payment.status === 'pending').length;
+        const paid = payments.filter((payment) => payment.status === 'PAID').length;
+        const pending = payments.filter((payment) => payment.status === 'PENDING').length;
         return { totalOrders, totalVolume, paid, pending };
     }, [payments]);
 

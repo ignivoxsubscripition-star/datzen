@@ -2,52 +2,60 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Lock, Mail, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { API_URL, setToken, setUser } from '@/utils/auth';
+import { loginSchema, type LoginInput } from '@/lib/validations/auth';
+import { cn } from '@/lib/utils';
 
 export default function LoginPage() {
     // ── UI state ──────────────────────────────────────────────────────────────
     const [showPassword, setShowPassword] = useState(false);
-
-    // ── Auth state ────────────────────────────────────────────────────────────
-    const [email, setEmail]       = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading]   = useState(false);
-    const [error, setError]       = useState<string | null>(null);
+    const [serverError, setServerError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
 
     const router = useRouter();
 
+    // ── Form setup ────────────────────────────────────────────────────────────
+    const {
+        register,
+        handleSubmit,
+        formState: { errors },
+    } = useForm<LoginInput>({
+        resolver: zodResolver(loginSchema),
+    });
+
     // ── Handle form submit ────────────────────────────────────────────────────
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setError(null);
+    const onSubmit = async (data: LoginInput) => {
+        setServerError(null);
         setLoading(true);
 
         try {
             const res = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify(data),
             });
 
-            const data = await res.json();
+            const result = await res.json();
 
             if (!res.ok) {
-                setError(data?.message ?? 'Invalid email or password. Please try again.');
+                setServerError(result?.message ?? 'Invalid email or password. Please try again.');
                 return;
             }
 
             // ── Store auth data ───────────────────────────────────────────────
-            setToken(data.token);
-            setUser(data.user);
+            setToken(result.token);
+            setUser(result.user);
 
             // ── Redirect on success ───────────────────────────────────────────
             router.push('/dashboard');
         } catch {
-            setError('Unable to reach the server. Please check your connection and try again.');
+            setServerError('Unable to reach the server. Please check your connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -117,13 +125,13 @@ export default function LoginPage() {
                         <p className="text-slate-600">Please enter your details to sign in.</p>
                     </div>
 
-                    <form className="space-y-6" onSubmit={handleSubmit}>
+                    <form className="space-y-6" onSubmit={handleSubmit(onSubmit)} noValidate>
 
                         {/* ── Error Banner ─────────────────────────────────── */}
-                        {error && (
-                            <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+                        {serverError && (
+                            <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl" role="alert">
                                 <span className="mt-0.5 shrink-0">⚠️</span>
-                                <span>{error}</span>
+                                <span>{serverError}</span>
                             </div>
                         )}
 
@@ -134,16 +142,24 @@ export default function LoginPage() {
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                                     <input
+                                        {...register('email')}
                                         type="email"
                                         id="email"
                                         placeholder="Enter your email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        required
                                         disabled={loading}
-                                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        aria-invalid={!!errors.email}
+                                        aria-describedby={errors.email ? "email-error" : undefined}
+                                        className={cn(
+                                            "w-full pl-10 pr-4 py-3 rounded-xl border outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed",
+                                            errors.email ? "border-red-500 focus:ring-red-100" : "border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        )}
                                     />
                                 </div>
+                                {errors.email && (
+                                    <p id="email-error" className="text-xs text-red-500 font-medium ml-1">
+                                        {errors.email.message}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -151,14 +167,17 @@ export default function LoginPage() {
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                                     <input
+                                        {...register('password')}
                                         type={showPassword ? 'text' : 'password'}
                                         id="password"
                                         placeholder="Enter your password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        required
                                         disabled={loading}
-                                        className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        aria-invalid={!!errors.password}
+                                        aria-describedby={errors.password ? "password-error" : undefined}
+                                        className={cn(
+                                            "w-full pl-10 pr-10 py-3 rounded-xl border outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed",
+                                            errors.password ? "border-red-500 focus:ring-red-100" : "border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        )}
                                     />
                                     <button
                                         type="button"
@@ -168,6 +187,11 @@ export default function LoginPage() {
                                         {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                                     </button>
                                 </div>
+                                {errors.password && (
+                                    <p id="password-error" className="text-xs text-red-500 font-medium ml-1">
+                                        {errors.password.message}
+                                    </p>
+                                )}
                             </div>
                         </div>
 

@@ -1,6 +1,6 @@
 import { CheckCircle2, Clock } from 'lucide-react';
 
-export type PaymentStatus = 'paid' | 'pending';
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
 
 export type Payment = {
     id: string;
@@ -38,21 +38,36 @@ export function truncId(id: string, len = 14): string {
 }
 
 const STATUS_STYLES: Record<PaymentStatus, { label: string; pill: string; dot: string }> = {
-    paid: {
+    PAID: {
         label: 'Paid',
         pill: 'bg-emerald-50 text-emerald-700 border-emerald-200',
         dot: 'bg-emerald-500',
     },
-    pending: {
+    PENDING: {
         label: 'Pending',
         pill: 'bg-amber-50 text-amber-700 border-amber-200',
         dot: 'bg-amber-500',
     },
+    FAILED: {
+        label: 'Failed',
+        pill: 'bg-rose-50 text-rose-700 border-rose-200',
+        dot: 'bg-rose-500',
+    },
+    CANCELLED: {
+        label: 'Cancelled',
+        pill: 'bg-slate-50 text-slate-700 border-slate-200',
+        dot: 'bg-slate-500',
+    },
+    EXPIRED: {
+        label: 'Expired',
+        pill: 'bg-slate-50 text-slate-700 border-slate-200',
+        dot: 'bg-slate-500',
+    },
 };
 
 export function StatusBadge({ status }: { status: PaymentStatus }) {
-    const cfg = STATUS_STYLES[status];
-    const Icon = status === 'paid' ? CheckCircle2 : Clock;
+    const cfg = STATUS_STYLES[status] || STATUS_STYLES.PENDING;
+    const Icon = status === 'PAID' ? CheckCircle2 : Clock;
     return (
         <span
             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${cfg.pill}`}

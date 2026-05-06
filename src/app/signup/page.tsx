@@ -1,50 +1,64 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Lock, Mail, ArrowRight, User, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { API_URL } from '@/utils/auth';
+import { signupSchema, type SignupInput } from '@/lib/validations/auth';
+import { PasswordStrengthUI } from '@/components/auth/PasswordStrengthUI';
+import { cn } from '@/lib/utils';
 
 export default function SignupPage() {
     // ── UI state ──────────────────────────────────────────────────────────────
     const [showPassword, setShowPassword] = useState(false);
-
-    // ── Auth state ────────────────────────────────────────────────────────────
-    const [name, setName]         = useState('');
-    const [email, setEmail]       = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading]   = useState(false);
-    const [error, setError]       = useState<string | null>(null);
+    const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+    const [serverError, setServerError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
 
     const router = useRouter();
 
+    // ── Form setup ────────────────────────────────────────────────────────────
+    const {
+        register,
+        handleSubmit,
+        watch,
+        formState: { errors },
+    } = useForm<SignupInput>({
+        resolver: zodResolver(signupSchema),
+        mode: 'onChange', // Enable live validation
+    });
+
+    const passwordValue = watch('password', '');
+    const termsAccepted = watch('terms', false);
+
     // ── Handle form submit ────────────────────────────────────────────────────
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setError(null);
+    const onSubmit = async (data: SignupInput) => {
+        setServerError(null);
         setLoading(true);
 
         try {
             const res = await fetch(`${API_URL}/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, password }),
+                body: JSON.stringify(data),
             });
 
-            const data = await res.json();
+            const result = await res.json();
 
             if (!res.ok) {
-                setError(data?.message ?? 'Registration failed. Please check your details and try again.');
+                setServerError(result?.message ?? 'Registration failed. Please check your details and try again.');
                 return;
             }
 
             // ── Redirect to login on success ──────────────────────────────────
             router.push('/login');
         } catch {
-            setError('Unable to reach the server. Please check your connection and try again.');
+            setServerError('Unable to reach the server. Please check your connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -114,13 +128,13 @@ export default function SignupPage() {
                         <p className="text-slate-600">Enter your details to get started with DATZEN.</p>
                     </div>
 
-                    <form className="space-y-5" onSubmit={handleSubmit}>
+                    <form className="space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
 
                         {/* ── Error Banner ─────────────────────────────────── */}
-                        {error && (
-                            <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+                        {serverError && (
+                            <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl" role="alert">
                                 <span className="mt-0.5 shrink-0">⚠️</span>
-                                <span>{error}</span>
+                                <span>{serverError}</span>
                             </div>
                         )}
 
@@ -131,16 +145,24 @@ export default function SignupPage() {
                                 <div className="relative">
                                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                                     <input
+                                        {...register('name')}
                                         type="text"
                                         id="name"
                                         placeholder="John Doe"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        required
                                         disabled={loading}
-                                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        aria-invalid={!!errors.name}
+                                        aria-describedby={errors.name ? "name-error" : undefined}
+                                        className={cn(
+                                            "w-full pl-10 pr-4 py-3 rounded-xl border outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed",
+                                            errors.name ? "border-red-500 focus:ring-red-100" : "border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        )}
                                     />
                                 </div>
+                                {errors.name && (
+                                    <p id="name-error" className="text-xs text-red-500 font-medium ml-1">
+                                        {errors.name.message}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -148,16 +170,24 @@ export default function SignupPage() {
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                                     <input
+                                        {...register('email')}
                                         type="email"
                                         id="email"
                                         placeholder="john@company.com"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        required
                                         disabled={loading}
-                                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        aria-invalid={!!errors.email}
+                                        aria-describedby={errors.email ? "email-error" : undefined}
+                                        className={cn(
+                                            "w-full pl-10 pr-4 py-3 rounded-xl border outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed",
+                                            errors.email ? "border-red-500 focus:ring-red-100" : "border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        )}
                                     />
                                 </div>
+                                {errors.email && (
+                                    <p id="email-error" className="text-xs text-red-500 font-medium ml-1">
+                                        {errors.email.message}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -165,14 +195,19 @@ export default function SignupPage() {
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                                     <input
+                                        {...register('password')}
                                         type={showPassword ? 'text' : 'password'}
                                         id="password"
                                         placeholder="Create a password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        required
                                         disabled={loading}
-                                        className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        onFocus={() => setIsPasswordFocused(true)}
+                                        onBlur={() => setIsPasswordFocused(false)}
+                                        aria-invalid={!!errors.password}
+                                        aria-describedby={errors.password ? "password-error" : undefined}
+                                        className={cn(
+                                            "w-full pl-10 pr-10 py-3 rounded-xl border outline-none transition-all placeholder:text-slate-400 text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed",
+                                            errors.password ? "border-red-500 focus:ring-red-100" : "border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        )}
                                     />
                                     <button
                                         type="button"
@@ -182,20 +217,35 @@ export default function SignupPage() {
                                         {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                                     </button>
                                 </div>
+                                
+                                <PasswordStrengthUI password={passwordValue} isFocused={isPasswordFocused} />
+                                
+                                {errors.password && (
+                                    <p id="password-error" className="text-xs text-red-500 font-medium ml-1 mt-1">
+                                        {errors.password.message}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
-                        <div className="flex items-start gap-3">
-                            <input type="checkbox" id="terms" className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                            <label htmlFor="terms" className="text-sm text-slate-600 leading-relaxed">
-                                I agree to the <a href="#" className="font-medium text-blue-600 hover:underline">Terms of Service</a> and <a href="#" className="font-medium text-blue-600 hover:underline">Privacy Policy</a>
-                            </label>
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-start gap-3">
+                                <input 
+                                    {...register('terms')}
+                                    type="checkbox" 
+                                    id="terms" 
+                                    className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
+                                />
+                                <label htmlFor="terms" className="text-sm text-slate-600 leading-relaxed">
+                                    I agree to the <a href="#" className="font-medium text-blue-600 hover:underline">Terms of Service</a> and <a href="#" className="font-medium text-blue-600 hover:underline">Privacy Policy</a>
+                                </label>
+                            </div>
                         </div>
 
                         {/* ── Submit Button ─────────────────────────────────── */}
                         <Button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || !termsAccepted}
                             className="w-full py-6 text-lg font-bold shadow-lg shadow-blue-500/20 rounded-xl group disabled:opacity-70 disabled:cursor-not-allowed"
                         >
                             {loading ? (

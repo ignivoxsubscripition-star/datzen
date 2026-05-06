@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Payment } from '../helpers';
+import type { PaymentStatus } from '../helpers';
+import { paymentApi, PaymentResponse } from '@/lib/paymentApi';
 
 export type QRPayload = {
     paymentId: string;
     amount: number;
     name: string;
-    status: 'pending' | 'paid';
+    status: PaymentStatus;
+    qrCode: string;
 };
 
 type StartPollingOptions = {
@@ -25,31 +27,43 @@ export function useQRCode() {
         }
     }, []);
 
+    const pollStatus = useCallback(async (paymentId: string, options: StartPollingOptions) => {
+        try {
+            const response = await paymentApi.getPaymentStatus(paymentId);
+            const status = response.data.status;
+
+            setPayload((prev) => {
+                if (!prev || prev.paymentId !== paymentId) return prev;
+                return { ...prev, status };
+            });
+
+            if (['PAID', 'FAILED', 'CANCELLED', 'EXPIRED'].includes(status)) {
+                stopPolling();
+                options.onSettled?.(paymentId);
+            }
+        } catch (error) {
+            console.error('Polling failed:', error);
+        }
+    }, [stopPolling]);
+
     const openQR = useCallback(
-        (payment: Payment, options: StartPollingOptions = {}) => {
+        (payment: PaymentResponse, options: StartPollingOptions = {}) => {
             stopPolling();
 
             setPayload({
                 paymentId: payment.id,
                 amount: payment.amount,
-                name: payment.name,
+                name: payment.customerName,
                 status: payment.status,
+                qrCode: payment.qrCode,
             });
 
+            // Start polling every 3 seconds
             intervalRef.current = setInterval(() => {
-                setPayload((prev) => {
-                    if (!prev) return prev;
-                    if (prev.status === 'paid') return prev;
-                    if (Math.random() > 0.65) {
-                        options.onSettled?.(prev.paymentId);
-                        stopPolling();
-                        return { ...prev, status: 'paid' };
-                    }
-                    return prev;
-                });
-            }, 2500);
+                pollStatus(payment.id, options);
+            }, 3000);
         },
-        [stopPolling],
+        [stopPolling, pollStatus],
     );
 
     const closeQR = useCallback(() => {

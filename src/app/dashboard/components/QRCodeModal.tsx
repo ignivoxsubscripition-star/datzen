@@ -1,10 +1,9 @@
-'use client';
-
-import { useEffect } from 'react';
-import { CheckCircle2, Loader2, QrCode, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CheckCircle2, Loader2, QrCode, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { formatCurrency } from './helpers';
 import type { QRPayload } from './hooks/useQRcode';
+import { paymentApi } from '@/lib/paymentApi';
 
 type QRCodeModalProps = {
     qr: QRPayload | null;
@@ -12,6 +11,8 @@ type QRCodeModalProps = {
 };
 
 export function QRCodeModal({ qr, onClose }: QRCodeModalProps) {
+    const [isSimulating, setIsSimulating] = useState(false);
+
     useEffect(() => {
         if (!qr) return;
         const handler = (event: KeyboardEvent) => {
@@ -23,7 +24,24 @@ export function QRCodeModal({ qr, onClose }: QRCodeModalProps) {
 
     if (!qr) return null;
 
-    const isPaid = qr.status === 'paid';
+    const isPaid = qr.status === 'PAID';
+    const isFailed = ['FAILED', 'CANCELLED', 'EXPIRED'].includes(qr.status);
+    const isPending = qr.status === 'PENDING';
+
+    const handleSimulate = async (type: 'success' | 'failure') => {
+        setIsSimulating(true);
+        try {
+            if (type === 'success') {
+                await paymentApi.simulateSuccess(qr.paymentId);
+            } else {
+                await paymentApi.simulateFailure(qr.paymentId);
+            }
+        } catch (error) {
+            console.error('Simulation failed:', error);
+        } finally {
+            setIsSimulating(false);
+        }
+    };
 
     return (
         <div
@@ -50,11 +68,13 @@ export function QRCodeModal({ qr, onClose }: QRCodeModalProps) {
                         <QrCode className="h-5 w-5" />
                     </div>
                     <h3 className="text-base font-semibold text-slate-900">
-                        {isPaid ? 'Payment Received' : 'Scan to Pay'}
+                        {isPaid ? 'Payment Received' : isFailed ? 'Payment Failed' : 'Scan to Pay'}
                     </h3>
                     <p className="mt-1 text-xs text-slate-500">
                         {isPaid
                             ? 'The customer has completed this payment.'
+                            : isFailed
+                            ? 'This payment request has failed or expired.'
                             : 'Open any UPI app and scan the QR below.'}
                     </p>
                 </div>
@@ -87,10 +107,21 @@ export function QRCodeModal({ qr, onClose }: QRCodeModalProps) {
                                 <CheckCircle2 className="h-12 w-12" />
                                 <p className="text-sm font-semibold">Success</p>
                             </div>
+                        ) : isFailed ? (
+                            <div className="flex flex-col items-center gap-2 text-rose-600">
+                                <AlertCircle className="h-12 w-12" />
+                                <p className="text-sm font-semibold">{qr.status}</p>
+                            </div>
                         ) : (
-                            <div className="flex flex-col items-center gap-2 text-slate-500">
-                                <QrCode className="h-16 w-16" />
-                                <p className="text-xs">QR placeholder</p>
+                            <div className="flex h-full w-full flex-col items-center justify-center gap-2 overflow-hidden">
+                                {qr.qrCode ? (
+                                    <img src={qr.qrCode} alt="Payment QR Code" className="h-full w-full object-contain" />
+                                ) : (
+                                    <div className="flex flex-col items-center gap-2 text-slate-500">
+                                        <QrCode className="h-16 w-16" />
+                                        <p className="text-xs">Generating QR...</p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -105,15 +136,45 @@ export function QRCodeModal({ qr, onClose }: QRCodeModalProps) {
                     </div>
                 </div>
 
+                {isPending && (
+                    <div className="px-6 pb-4">
+                        <div className="flex flex-col gap-2 rounded-xl border border-dashed border-amber-200 bg-amber-50/50 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">
+                                Developer Tools
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                                    onClick={() => handleSimulate('success')}
+                                    disabled={isSimulating}
+                                >
+                                    {isSimulating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Simulate Success'}
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                                    onClick={() => handleSimulate('failure')}
+                                    disabled={isSimulating}
+                                >
+                                    {isSimulating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Simulate Failure'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-3">
-                    {!isPaid && (
+                    {isPending && (
                         <span className="inline-flex items-center gap-1.5 text-xs text-amber-700">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             Waiting for payment…
                         </span>
                     )}
                     <Button size="sm" variant="outline" className="ml-auto" onClick={onClose}>
-                        {isPaid ? 'Done' : 'Close'}
+                        {(isPaid || isFailed) ? 'Done' : 'Close'}
                     </Button>
                 </div>
             </div>

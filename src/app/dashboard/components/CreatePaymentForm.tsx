@@ -8,8 +8,8 @@ import type { Payment } from './helpers';
 
 type CreatePaymentFormProps = {
     isCreating: boolean;
-    onCreate: (input: CreatePaymentInput) => Promise<Payment>;
-    onSuccess: (payment: Payment) => void;
+    onCreate: (input: CreatePaymentInput) => Promise<any>;
+    onSuccess: (payment: any) => void;
 };
 
 const INITIAL: CreatePaymentInput = { amount: '', name: '', phone: '', email: '' };
